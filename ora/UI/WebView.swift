@@ -82,12 +82,16 @@ struct WebView: NSViewRepresentable {
                 return nil
             }
 
+            // Find the source tab that initiated this new tab request
+            let sourceTab = tabManager.getTab(by: webView)
+
             // Create a new tab in the background for the target URL
             DispatchQueue.main.async {
                 _ = tabManager.openTab(
                     url: url,
                     historyManager: historyManager,
-                    downloadManager: self.downloadManager
+                    downloadManager: self.downloadManager,
+                    parentTab: sourceTab
                 )
             }
 

@@ -18,10 +18,33 @@ struct NormalTabsList: View {
     @Query var containers: [TabContainer]
     @EnvironmentObject var tabManager: TabManager
 
+    private var treeSortedTabs: [Tab] {
+        var result: [Tab] = []
+        var processed = Set<UUID>()
+
+        func addTabWithChildren(_ tab: Tab) {
+            guard !processed.contains(tab.id) else { return }
+            processed.insert(tab.id)
+            result.append(tab)
+
+            let children = tab.getChildren(from: tabManager).sorted { $0.order < $1.order }
+            for child in children {
+                addTabWithChildren(child)
+            }
+        }
+
+        let rootTabs = tabs.filter { $0.parentTabId == nil }.sorted { $0.order < $1.order }
+        for rootTab in rootTabs {
+            addTabWithChildren(rootTab)
+        }
+
+        return result
+    }
+
     var body: some View {
         Section {
             NewTabButton(addNewTab: onAddNewTab)
-            ForEach(tabs) { tab in
+            ForEach(treeSortedTabs) { tab in
                 TabItem(
                     tab: tab,
                     isSelected: tabManager.isActive(tab),
@@ -53,6 +76,6 @@ struct NormalTabsList: View {
                 tabManager: tabManager
             )
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: tabs.map(\.id))
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: treeSortedTabs.map(\.id))
     }
 }

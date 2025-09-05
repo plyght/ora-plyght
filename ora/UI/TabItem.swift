@@ -91,16 +91,38 @@ struct TabItem: View {
     @State private var isHovering = false
 
     var body: some View {
-        HStack {
-            FavIcon(
-                isWebViewReady: tab.isWebViewReady,
-                favicon: tab.favicon,
-                faviconLocalFile: tab.faviconLocalFile,
-                textColor: textColor
+        HStack(spacing: 0) {
+            // Tree connector and indentation - separate from tab styling
+            if tab.treeLevel > 0 {
+                TreeConnector(level: tab.treeLevel, theme: theme)
+                    .frame(width: CGFloat(tab.treeLevel * 20))
+            }
+
+            // Main tab content with its own styling
+            HStack {
+                FavIcon(
+                    isWebViewReady: tab.isWebViewReady,
+                    favicon: tab.favicon,
+                    faviconLocalFile: tab.faviconLocalFile,
+                    textColor: textColor
+                )
+                tabTitle
+                Spacer()
+                actionButton
+            }
+            .padding(8)
+            .opacity(isDragging ? 0.0 : 1.0)
+            .background(backgroundColor)
+            .cornerRadius(10)
+            .overlay(
+                isDragging ?
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        theme.invertedSolidWindowBackgroundColor.opacity(0.25),
+                        style: StrokeStyle(lineWidth: 1, dash: [5, 5])
+                    )
+                    : nil
             )
-            tabTitle
-            Spacer()
-            actionButton
         }
         .onAppear {
             if tabManager.isActive(tab) {
@@ -125,33 +147,6 @@ struct TabItem: View {
                 }
             }
         }
-        .padding(8)
-        .opacity(isDragging ? 0.0 : 1.0)
-        .background(backgroundColor)
-        .cornerRadius(10)
-        .overlay(
-            isDragging ?
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(
-                    theme.invertedSolidWindowBackgroundColor.opacity(0.25),
-                    style: StrokeStyle(lineWidth: 1, dash: [5, 5])
-                )
-                : nil
-        )
-        .onTapGesture {
-            onTap()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                if !tab.isWebViewReady {
-                    tab
-                        .restoreTransientState(
-                            historyManger: historyManager,
-                            downloadManager: downloadManager,
-                            tabManager: tabManager
-                        )
-                }
-            }
-        }
-//        .onTapGesture(perform: onTap)
         .onHover { isHovering = $0 }
         .contextMenu { contextMenuItems }
         .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isDragging)
@@ -224,6 +219,44 @@ struct TabItem: View {
 
         Button(role: .destructive, action: onClose) {
             Label("Close Tab", systemImage: "xmark")
+        }
+    }
+}
+
+struct TreeConnector: View {
+    let level: Int
+    let theme: Theme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0 ..< level, id: \.self) { currentLevel in
+                if currentLevel == level - 1 {
+                    // Last level - draw the L-shaped connector
+                    ZStack {
+                        // Vertical line going up (connecting to parent)
+                        Rectangle()
+                            .fill(theme.foreground.opacity(0.4))
+                            .frame(width: 1.5, height: 8)
+                            .offset(x: -9, y: 0)
+
+                        // Horizontal line going right (connecting to tab)
+                        Rectangle()
+                            .fill(theme.foreground.opacity(0.4))
+                            .frame(width: 8, height: 1.5)
+                            .offset(x: -5.25, y: 4)
+                    }
+                    .frame(width: 20, height: 16)
+                } else {
+                    // Parent levels - show vertical continuation line
+                    ZStack {
+                        Rectangle()
+                            .fill(theme.foreground.opacity(0.4))
+                            .frame(width: 1.5, height: 16)
+                            .offset(x: -9, y: 0)
+                    }
+                    .frame(width: 20, height: 16)
+                }
+            }
         }
     }
 }

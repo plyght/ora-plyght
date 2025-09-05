@@ -137,6 +137,16 @@ class TabManager: ObservableObject {
         return self.activeTab
     }
 
+    func getTab(by id: UUID) -> Tab? {
+        guard let container = activeContainer else { return nil }
+        return container.tabs.first { $0.id == id }
+    }
+
+    func getTab(by webView: WKWebView) -> Tab? {
+        guard let container = activeContainer else { return nil }
+        return container.tabs.first { $0.webView === webView }
+    }
+
     func moveTabToContainer(_ tab: Tab, to: TabContainer) {
         tab.container = to
         try? modelContext.save()
@@ -222,7 +232,8 @@ class TabManager: ObservableObject {
     func openTab(
         url: URL,
         historyManager: HistoryManager,
-        downloadManager: DownloadManager? = nil
+        downloadManager: DownloadManager? = nil,
+        parentTab: Tab? = nil
     ) {
         if let container = activeContainer {
             if let host = url.host {
@@ -240,7 +251,8 @@ class TabManager: ObservableObject {
                     order: container.tabs.count + 1,
                     historyManager: historyManager,
                     downloadManager: downloadManager,
-                    tabManager: self
+                    tabManager: self,
+                    parentTab: parentTab
                 )
                 modelContext.insert(newTab)
                 container.tabs.append(newTab)
@@ -265,6 +277,18 @@ class TabManager: ObservableObject {
     }
 
     func closeTab(tab: Tab) {
+        // Handle tree relationships: promote children when parent is closed
+        let children = tab.getChildren(from: self)
+        for child in children {
+            child.parentTabId = tab.parentTabId // Promote to parent's level
+            if let parentTab = tab.parentTabId.flatMap({ getTab(by: $0) }) {
+                parentTab.addChild(child)
+            }
+        }
+
+        // Remove this tab from its parent's children list
+        tab.removeFromParent(in: self)
+
         // If the closed tab was active, select another tab
         if self.activeTab?.id == tab.id {
             if let nextTab = tab.container.tabs

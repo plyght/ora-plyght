@@ -34,6 +34,9 @@ class Tab: ObservableObject, Identifiable {
     var faviconLocalFile: URL?
     var backgroundColorHex: String = "#000000"
 
+    var parentTabId: UUID?
+    var childTabIds: [UUID] = []
+
     //    @Transient @Published var backgroundColor: Color = Color(.black)
     @Transient @Published var backgroundColor: Color = .black
     @Transient var historyManager: HistoryManager?
@@ -64,7 +67,8 @@ class Tab: ObservableObject, Identifiable {
         order: Int,
         historyManager: HistoryManager? = nil,
         downloadManager: DownloadManager? = nil,
-        tabManager: TabManager
+        tabManager: TabManager,
+        parentTab: Tab? = nil
     ) {
         let nowDate = Date()
         self.id = id
@@ -78,6 +82,11 @@ class Tab: ObservableObject, Identifiable {
         self.type = type
         self.isPlayingMedia = isPlayingMedia
         self.container = container
+
+        // Initialize parent-child relationships
+        self.parentTabId = parentTab?.id
+        self.childTabIds = []
+
         // Initialize webView with provided configuration or default
 
         let config = TabScriptHandler()
@@ -92,6 +101,11 @@ class Tab: ObservableObject, Identifiable {
         self.historyManager = historyManager
         self.downloadManager = downloadManager
         self.tabManager = tabManager
+
+        // Set up parent-child relationship after all properties are initialized
+        if let parentTab {
+            parentTab.childTabIds.append(self.id)
+        }
 
         config.tab = self
         // Configure WebView for performance
@@ -356,6 +370,39 @@ class Tab: ObservableObject, Identifiable {
             let request = URLRequest(url: url)
             webView.load(request)
         }
+    }
+
+    // MARK: - Tree Management
+
+    @MainActor var treeLevel: Int {
+        guard let parentId = parentTabId,
+              let tabManager else { return 0 }
+
+        if let parent = tabManager.getTab(by: parentId) {
+            return parent.treeLevel + 1
+        }
+        return 0
+    }
+
+    func addChild(_ childTab: Tab) {
+        if !childTabIds.contains(childTab.id) {
+            childTabIds.append(childTab.id)
+        }
+    }
+
+    func removeChild(_ childTab: Tab) {
+        childTabIds.removeAll { $0 == childTab.id }
+    }
+
+    @MainActor func getChildren(from tabManager: TabManager) -> [Tab] {
+        return childTabIds.compactMap { tabManager.getTab(by: $0) }
+    }
+
+    @MainActor func removeFromParent(in tabManager: TabManager) {
+        guard let parentId = parentTabId,
+              let parent = tabManager.getTab(by: parentId) else { return }
+        parent.removeChild(self)
+        self.parentTabId = nil
     }
 }
 
